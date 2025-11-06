@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SleepCycle-Alarm - Find Your Perfect Bedtime</title>
+    <meta name="description" content="Calculate optimal bedtimes based on sleep cycles to wake up refreshed">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1 class="title">😴 SleepCycle-Alarm</h1>
+            <p class="subtitle">Calculate your perfect bedtime based on sleep cycles</p>
+        </header>
+
+        <!-- Info Section -->
+        <section class="info-box">
+            <h2>Why Sleep Cycles Matter</h2>
+            <p>
+                Most adults go through <strong>4-6 sleep cycles</strong> per night.
+                Each cycle lasts approximately <strong>90-120 minutes</strong>.
+                Waking up at the end of a cycle (rather than in the middle) helps you feel more refreshed and alert.
+            </p>
+            <p class="tip">
+                💡 <strong>Tip:</strong> Aim for at least 7-9 hours of sleep per night for optimal health.
+            </p>
+        </section>
+
+        <!-- Calculator Form -->
+        <section class="calculator-card">
+            <h2>Calculate Your Bedtime</h2>
+
+            <form id="calculator-form">
+                <!-- Wake Time -->
+                <div class="form-group">
+                    <label for="wake-time">What time do you want to wake up?</label>
+                    <input
+                        type="time"
+                        id="wake-time"
+                        name="wake-time"
+                        required
+                        value="07:30"
+                    >
+                </div>
+
+                <!-- Advanced Options Toggle -->
+                <button type="button" class="toggle-advanced" id="toggle-advanced">
+                    ⚙️ Advanced Options
+                </button>
+
+                <!-- Advanced Options (Hidden by default) -->
+                <div class="advanced-options" id="advanced-options">
+                    <div class="form-group">
+                        <label for="sleep-latency">
+                            Time to fall asleep (minutes)
+                            <span class="help-text">How long does it usually take you to fall asleep?</span>
+                        </label>
+                        <input
+                            type="number"
+                            id="sleep-latency"
+                            name="sleep-latency"
+                            min="0"
+                            max="60"
+                            value="15"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cycle-length">
+                            Sleep cycle length (minutes)
+                            <span class="help-text">Typical range: 60-110 minutes. Average is 90.</span>
+                        </label>
+                        <input
+                            type="number"
+                            id="cycle-length"
+                            name="cycle-length"
+                            min="60"
+                            max="110"
+                            value="90"
+                        >
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="min-cycles">Min cycles</label>
+                            <input
+                                type="number"
+                                id="min-cycles"
+                                name="min-cycles"
+                                min="1"
+                                max="10"
+                                value="4"
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label for="max-cycles">Max cycles</label>
+                            <input
+                                type="number"
+                                id="max-cycles"
+                                name="max-cycles"
+                                min="1"
+                                max="10"
+                                value="6"
+                            >
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" class="btn-primary" id="calculate-btn">
+                    Calculate Bedtimes
+                </button>
+            </form>
+        </section>
+
+        <!-- Results Section -->
+        <section class="results-section" id="results-section" style="display: none;">
+            <h2>Your Bedtime Options</h2>
+            <p class="results-subtitle">
+                Based on waking up at <strong id="results-wake-time"></strong>
+            </p>
+
+            <div id="results-container" class="results-grid">
+                <!-- Results will be inserted here by JavaScript -->
+            </div>
+        </section>
+
+        <!-- Error Message -->
+        <div class="error-message" id="error-message" style="display: none;">
+            <strong>⚠️ Error:</strong> <span id="error-text"></span>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>
+                <strong>Important:</strong> This tool provides general guidance based on sleep science research.
+                It is not a substitute for medical advice. Consult a healthcare provider for sleep disorders or concerns.
+            </p>
+            <p class="api-info">
+                API: <a href="http://localhost:8000/docs" target="_blank">http://localhost:8000/docs</a>
+            </p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

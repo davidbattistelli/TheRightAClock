@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # Backend API service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sleepcycle-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - API_PORT=8000
+      - CORS_ORIGINS=http://localhost:8080,http://localhost:3000
+      - DEBUG=true
+    volumes:
+      # Mount code for development (hot reload)
+      - ./backend/app:/app/app
+      - ./backend/tests:/app/tests
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - sleepcycle-network
+
+  # Frontend web service
+  frontend:
+    image: nginx:alpine
+    container_name: sleepcycle-frontend
+    ports:
+      - "8080:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - sleepcycle-network
+
+networks:
+  sleepcycle-network:
+    driver: bridge
+
+# For production, add:
+# volumes:
+#   postgres_data:
+#
+# And PostgreSQL service:
+# postgres:
+#   image: postgres:15-alpine
+#   environment:
+#     POSTGRES_DB: sleepcycle
+#     POSTGRES_USER: sleepcycle
+#     POSTGRES_PASSWORD: changeme
+#   volumes:
+#     - postgres_data:/var/lib/postgresql/data
