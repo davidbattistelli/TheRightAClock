@@ -300,6 +300,25 @@ input[type="number"]:focus {
     margin-bottom: var(--space-lg);
 }
 
+/* Info Message */
+.info-message {
+    background: linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%);
+    color: var(--primary-dark);
+    padding: var(--space-lg);
+    border-radius: var(--radius-md);
+    border-left: 4px solid var(--primary);
+    text-align: center;
+}
+
+.info-message p {
+    margin-bottom: var(--space-sm);
+    font-size: 1rem;
+}
+
+.info-message p:last-child {
+    margin-bottom: 0;
+}
+
 /* Footer */
 .footer {
     text-align: center;
@@ -383,6 +402,13 @@ input[type="number"]:focus {
 .countdown.active {
     background: linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%);
     color: var(--primary);
+}
+
+.countdown.warning {
+    background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);
+    color: #ea580c;
+    font-weight: 700;
+    animation: pulse 2s ease-in-out infinite;
 }
 
 .countdown.now {

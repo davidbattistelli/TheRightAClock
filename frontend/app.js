@@ -24,6 +24,8 @@ const calculateBtn = document.getElementById("calculate-btn");
 let isAdvancedOpen = false;
 let countdownIntervals = {}; // Store countdown intervals by bedtime
 let notificationPermission = null;
+let notificationSent = {}; // Track which bedtimes have sent notifications
+let wakeUpAlarms = {}; // Store wake-up alarm timeouts
 
 /**
  * Initialize the application
@@ -210,11 +212,30 @@ function displayResults(data) {
     Object.values(countdownIntervals).forEach(clearInterval);
     countdownIntervals = {};
 
+    // Filter out past bedtimes (within last 2 hours means it's too late)
+    const validOptions = data.options.filter(option => {
+        const timeInfo = getTimeUntilBedtime(option.bedtime);
+        return !timeInfo.isPast;
+    });
+
+    // If no valid options, show message
+    if (validOptions.length === 0) {
+        resultsContainer.innerHTML = `
+            <div class="info-message">
+                <p>⏰ All bedtime options for tonight have passed.</p>
+                <p>Try calculating for a later wake-up time, or check back in a few hours for tomorrow's bedtimes.</p>
+            </div>
+        `;
+        resultsSection.style.display = "block";
+        resultsSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        return;
+    }
+
     // Set wake time in header
     resultsWakeTime.textContent = data.wake_time;
 
-    // Create result cards
-    data.options.forEach((option, index) => {
+    // Create result cards for valid options only
+    validOptions.forEach((option, index) => {
         const card = createResultCard(option, data.wake_time, index === 0);
         resultsContainer.appendChild(card);
     });
@@ -238,12 +259,16 @@ function getTimeUntilBedtime(bedtime) {
     const bedtimeDate = new Date();
     bedtimeDate.setHours(hours, minutes, 0, 0);
 
-    // If bedtime is earlier than current time, it's for today (past bedtime)
-    // Otherwise check if it's in the past (already happened today)
     let diff = bedtimeDate - now;
 
-    // If negative and less than -12 hours, assume it's for tonight (add 24 hours)
-    if (diff < 0 && diff > -12 * 60 * 60 * 1000) {
+    // If bedtime is in the past (negative diff)
+    if (diff < 0) {
+        // If less than 2 hours ago, it's passed for today - mark as past
+        if (diff > -2 * 60 * 60 * 1000) {
+            const totalMinutes = Math.floor(diff / 1000 / 60);
+            return { hours: 0, minutes: 0, totalMinutes, isPast: true };
+        }
+        // If more than 2 hours ago, assume it's for tomorrow
         bedtimeDate.setDate(bedtimeDate.getDate() + 1);
         diff = bedtimeDate - now;
     }
@@ -252,7 +277,7 @@ function getTimeUntilBedtime(bedtime) {
     const hoursUntil = Math.floor(totalMinutes / 60);
     const minutesUntil = totalMinutes % 60;
 
-    return { hours: hoursUntil, minutes: minutesUntil, totalMinutes, isPast: totalMinutes < 0 };
+    return { hours: hoursUntil, minutes: minutesUntil, totalMinutes, isPast: false };
 }
 
 /**
@@ -269,30 +294,134 @@ function updateCountdown(element, bedtime) {
         return false; // Stop countdown
     }
 
+    // Send notification 25 minutes before bedtime (only once)
+    if (totalMinutes <= 25 && totalMinutes > 0 && !notificationSent[bedtime]) {
+        sendWindDownNotification(bedtime, totalMinutes);
+        notificationSent[bedtime] = true;
+    }
+
     if (totalMinutes === 0) {
-        element.textContent = "🔔 Time to sleep now!";
+        element.textContent = "🛏️ It's bedtime now!";
         element.className = "countdown now";
-        sendBedtimeNotification(bedtime);
         return false; // Stop countdown
     }
 
-    element.textContent = `⏱️ ${hours}h ${minutes}m until bedtime`;
-    element.className = "countdown active";
+    if (totalMinutes <= 25) {
+        element.textContent = `⏱️ ${totalMinutes}min - Start winding down!`;
+        element.className = "countdown warning";
+    } else {
+        element.textContent = `⏱️ ${hours}h ${minutes}m until bedtime`;
+        element.className = "countdown active";
+    }
+
     return true; // Continue countdown
 }
 
 /**
- * Send browser notification for bedtime
+ * Send wind-down notification before bedtime
  * @param {string} bedtime - Bedtime in HH:MM format
+ * @param {number} minutesLeft - Minutes until bedtime
  */
-function sendBedtimeNotification(bedtime) {
+function sendWindDownNotification(bedtime, minutesLeft) {
     if (notificationPermission === "granted") {
-        new Notification("Time to Sleep! 😴", {
-            body: `It's ${bedtime} - Time to go to bed to wake up refreshed!`,
-            icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='75' font-size='75'>😴</text></svg>",
+        new Notification("🌙 Time to Wind Down", {
+            body: `${minutesLeft} minutes until bedtime (${bedtime}). Put away your phone, dim the lights, and start relaxing.`,
+            icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='75' font-size='75'>🌙</text></svg>",
             requireInteraction: true,
         });
     }
+}
+
+/**
+ * Create gentle wake-up alarm sound using Web Audio API
+ * @returns {Object} Audio context and oscillator
+ */
+function createGentleAlarmSound() {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Create gentle chime sequence
+    function playChime(frequency, duration, delay) {
+        setTimeout(() => {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.value = frequency;
+            oscillator.type = 'sine'; // Soft, pure tone
+
+            // Fade in and out
+            const now = audioContext.currentTime;
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(0.3, now + 0.1);
+            gainNode.gain.linearRampToValueAtTime(0, now + duration);
+
+            oscillator.start(now);
+            oscillator.stop(now + duration);
+        }, delay);
+    }
+
+    // Play pleasant chord progression (C major arpeggio)
+    playChime(523.25, 1.0, 0);    // C5
+    playChime(659.25, 1.0, 300);  // E5
+    playChime(783.99, 1.0, 600);  // G5
+    playChime(1046.50, 1.5, 900); // C6
+
+    return audioContext;
+}
+
+/**
+ * Set up wake-up alarm
+ * @param {string} wakeTime - Wake time in HH:MM format
+ * @param {string} bedtime - Bedtime chosen (for tracking)
+ */
+function setupWakeUpAlarm(wakeTime, bedtime) {
+    const now = new Date();
+    const [hours, minutes] = wakeTime.split(":").map(Number);
+
+    const wakeDate = new Date();
+    wakeDate.setHours(hours, minutes, 0, 0);
+
+    // If wake time is before now, it's tomorrow
+    if (wakeDate <= now) {
+        wakeDate.setDate(wakeDate.getDate() + 1);
+    }
+
+    const msUntilWake = wakeDate - now;
+
+    // Clear any existing alarm for this bedtime
+    if (wakeUpAlarms[bedtime]) {
+        clearTimeout(wakeUpAlarms[bedtime]);
+    }
+
+    // Set alarm
+    wakeUpAlarms[bedtime] = setTimeout(() => {
+        // Play alarm sound
+        createGentleAlarmSound();
+
+        // Show notification
+        if (notificationPermission === "granted") {
+            new Notification("☀️ Good Morning!", {
+                body: `It's ${wakeTime} - Time to wake up! You completed your sleep cycles.`,
+                icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='75' font-size='75'>☀️</text></svg>",
+                requireInteraction: true,
+                tag: 'wake-up-alarm',
+            });
+        }
+
+        // Repeat alarm every 30 seconds for 5 minutes
+        let repeatCount = 0;
+        const repeatInterval = setInterval(() => {
+            createGentleAlarmSound();
+            repeatCount++;
+            if (repeatCount >= 10) { // 10 times = 5 minutes
+                clearInterval(repeatInterval);
+            }
+        }, 30000);
+
+        delete wakeUpAlarms[bedtime];
+    }, msUntilWake);
 }
 
 /**
@@ -370,11 +499,12 @@ function downloadCalendarEvent(bedtime, wakeTime, cycles) {
 }
 
 /**
- * Toggle browser notifications for a specific bedtime
+ * Toggle browser notifications and wake-up alarm
  * @param {string} bedtime - Bedtime in HH:MM format
+ * @param {string} wakeTime - Wake time in HH:MM format
  * @param {HTMLElement} button - The button element that was clicked
  */
-function toggleNotifications(bedtime, button) {
+function toggleNotifications(bedtime, wakeTime, button) {
     if (notificationPermission !== "granted") {
         if (Notification.permission === "denied") {
             alert("Notifications are blocked. Please enable them in your browser settings.");
@@ -382,26 +512,37 @@ function toggleNotifications(bedtime, button) {
             Notification.requestPermission().then((permission) => {
                 notificationPermission = permission;
                 if (permission === "granted") {
-                    button.textContent = "✓ Alert Enabled";
-                    button.classList.add("enabled");
-                    // Test notification
-                    new Notification("Notifications Enabled! 🔔", {
-                        body: `You'll be notified when it's ${bedtime}`,
-                    });
+                    setupAlarms(bedtime, wakeTime, button);
                 } else {
                     alert("Please enable notifications to use this feature.");
                 }
             });
         }
     } else {
-        button.textContent = "✓ Alert Enabled";
-        button.classList.add("enabled");
-        button.disabled = true;
-        // Test notification
-        new Notification("Notifications Enabled! 🔔", {
-            body: `You'll be notified when it's ${bedtime}`,
-        });
+        setupAlarms(bedtime, wakeTime, button);
     }
+}
+
+/**
+ * Set up all alarms for a bedtime option
+ * @param {string} bedtime - Bedtime in HH:MM format
+ * @param {string} wakeTime - Wake time in HH:MM format
+ * @param {HTMLElement} button - The button element
+ */
+function setupAlarms(bedtime, wakeTime, button) {
+    // Set up wake-up alarm
+    setupWakeUpAlarm(wakeTime, bedtime);
+
+    // Update button state
+    button.textContent = "✓ Alarm Set";
+    button.classList.add("enabled");
+    button.disabled = true;
+
+    // Show confirmation notification
+    new Notification("⏰ Alarms Activated!", {
+        body: `Wind-down reminder at ${bedtime} & wake-up alarm at ${wakeTime} are now set!`,
+        icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='75' font-size='75'>⏰</text></svg>",
+    });
 }
 
 /**
@@ -440,8 +581,8 @@ function createResultCard(option, wakeTime, isFirst) {
             <button class="btn-action btn-calendar" onclick="downloadCalendarEvent('${option.bedtime}', '${wakeTime}', ${option.cycles})">
                 📅 Add to Calendar
             </button>
-            <button class="btn-action btn-notify" onclick="toggleNotifications('${option.bedtime}', this)">
-                🔔 Enable Alert
+            <button class="btn-action btn-notify" onclick="toggleNotifications('${option.bedtime}', '${wakeTime}', this)">
+                ⏰ Set Wake Alarm
             </button>
         </div>
     `;
