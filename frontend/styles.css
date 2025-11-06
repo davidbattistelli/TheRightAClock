@@ -370,6 +370,105 @@ input[type="number"]:focus {
     }
 }
 
+/* Countdown Timer */
+.countdown {
+    font-size: 1rem;
+    font-weight: 600;
+    padding: var(--space-sm);
+    margin-bottom: var(--space-sm);
+    border-radius: var(--radius-sm);
+    text-align: center;
+}
+
+.countdown.active {
+    background: linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%);
+    color: var(--primary);
+}
+
+.countdown.now {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #92400e;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.countdown.past {
+    background: var(--bg-main);
+    color: var(--text-secondary);
+    font-weight: 400;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.02);
+    }
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-sm);
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border);
+}
+
+.btn-action {
+    padding: var(--space-sm);
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: white;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.btn-action:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px var(--shadow);
+}
+
+.btn-action:active {
+    transform: translateY(0);
+}
+
+.btn-calendar {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.btn-calendar:hover {
+    background: var(--primary);
+    color: white;
+}
+
+.btn-notify {
+    border-color: var(--warning);
+    color: var(--warning);
+}
+
+.btn-notify:hover {
+    background: var(--warning);
+    color: white;
+}
+
+.btn-notify.enabled {
+    background: var(--success);
+    color: white;
+    border-color: var(--success);
+    cursor: default;
+}
+
+.btn-notify.enabled:hover {
+    transform: none;
+}
+
 /* Accessibility */
 @media (prefers-reduced-motion: reduce) {
     *,

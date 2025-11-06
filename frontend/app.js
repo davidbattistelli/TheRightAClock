@@ -22,6 +22,8 @@ const calculateBtn = document.getElementById("calculate-btn");
 
 // State
 let isAdvancedOpen = false;
+let countdownIntervals = {}; // Store countdown intervals by bedtime
+let notificationPermission = null;
 
 /**
  * Initialize the application
@@ -37,7 +39,27 @@ function init() {
     const defaultWakeTime = now.toTimeString().slice(0, 5);
     document.getElementById("wake-time").value = defaultWakeTime;
 
+    // Request notification permission
+    requestNotificationPermission();
+
     console.log("SleepCycle-Alarm initialized");
+}
+
+/**
+ * Request notification permission from user
+ */
+async function requestNotificationPermission() {
+    if (!("Notification" in window)) {
+        console.log("This browser does not support notifications");
+        return;
+    }
+
+    if (Notification.permission === "granted") {
+        notificationPermission = "granted";
+    } else if (Notification.permission !== "denied") {
+        const permission = await Notification.requestPermission();
+        notificationPermission = permission;
+    }
 }
 
 /**
@@ -183,15 +205,17 @@ async function calculateBedtimes(data) {
  * @param {Object} data - API response data
  */
 function displayResults(data) {
-    // Clear previous results
+    // Clear previous results and intervals
     resultsContainer.innerHTML = "";
+    Object.values(countdownIntervals).forEach(clearInterval);
+    countdownIntervals = {};
 
     // Set wake time in header
     resultsWakeTime.textContent = data.wake_time;
 
     // Create result cards
     data.options.forEach((option, index) => {
-        const card = createResultCard(option, index === 0);
+        const card = createResultCard(option, data.wake_time, index === 0);
         resultsContainer.appendChild(card);
     });
 
@@ -203,12 +227,191 @@ function displayResults(data) {
 }
 
 /**
+ * Calculate time until bedtime
+ * @param {string} bedtime - Bedtime in HH:MM format
+ * @returns {Object} Hours and minutes until bedtime
+ */
+function getTimeUntilBedtime(bedtime) {
+    const now = new Date();
+    const [hours, minutes] = bedtime.split(":").map(Number);
+
+    const bedtimeDate = new Date();
+    bedtimeDate.setHours(hours, minutes, 0, 0);
+
+    // If bedtime is earlier than current time, it's for today (past bedtime)
+    // Otherwise check if it's in the past (already happened today)
+    let diff = bedtimeDate - now;
+
+    // If negative and less than -12 hours, assume it's for tonight (add 24 hours)
+    if (diff < 0 && diff > -12 * 60 * 60 * 1000) {
+        bedtimeDate.setDate(bedtimeDate.getDate() + 1);
+        diff = bedtimeDate - now;
+    }
+
+    const totalMinutes = Math.floor(diff / 1000 / 60);
+    const hoursUntil = Math.floor(totalMinutes / 60);
+    const minutesUntil = totalMinutes % 60;
+
+    return { hours: hoursUntil, minutes: minutesUntil, totalMinutes, isPast: totalMinutes < 0 };
+}
+
+/**
+ * Update countdown display
+ * @param {HTMLElement} element - Countdown element
+ * @param {string} bedtime - Bedtime in HH:MM format
+ */
+function updateCountdown(element, bedtime) {
+    const { hours, minutes, totalMinutes, isPast } = getTimeUntilBedtime(bedtime);
+
+    if (isPast) {
+        element.textContent = "Time has passed";
+        element.className = "countdown past";
+        return false; // Stop countdown
+    }
+
+    if (totalMinutes === 0) {
+        element.textContent = "🔔 Time to sleep now!";
+        element.className = "countdown now";
+        sendBedtimeNotification(bedtime);
+        return false; // Stop countdown
+    }
+
+    element.textContent = `⏱️ ${hours}h ${minutes}m until bedtime`;
+    element.className = "countdown active";
+    return true; // Continue countdown
+}
+
+/**
+ * Send browser notification for bedtime
+ * @param {string} bedtime - Bedtime in HH:MM format
+ */
+function sendBedtimeNotification(bedtime) {
+    if (notificationPermission === "granted") {
+        new Notification("Time to Sleep! 😴", {
+            body: `It's ${bedtime} - Time to go to bed to wake up refreshed!`,
+            icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='75' font-size='75'>😴</text></svg>",
+            requireInteraction: true,
+        });
+    }
+}
+
+/**
+ * Generate .ics calendar file content
+ * @param {string} bedtime - Bedtime in HH:MM format
+ * @param {string} wakeTime - Wake time in HH:MM format
+ * @param {number} cycles - Number of sleep cycles
+ * @returns {string} .ics file content
+ */
+function generateICSFile(bedtime, wakeTime, cycles) {
+    const now = new Date();
+    const [bedHours, bedMinutes] = bedtime.split(":").map(Number);
+    const [wakeHours, wakeMinutes] = wakeTime.split(":").map(Number);
+
+    // Create bedtime date (tonight or tomorrow if past)
+    const bedtimeDate = new Date();
+    bedtimeDate.setHours(bedHours, bedMinutes, 0, 0);
+    if (bedtimeDate < now) {
+        bedtimeDate.setDate(bedtimeDate.getDate() + 1);
+    }
+
+    // Create wake time date (next day from bedtime)
+    const wakeTimeDate = new Date(bedtimeDate);
+    wakeTimeDate.setDate(wakeTimeDate.getDate() + 1);
+    wakeTimeDate.setHours(wakeHours, wakeMinutes, 0, 0);
+
+    // Create alarm time (15 min before bedtime for reminder)
+    const alarmDate = new Date(bedtimeDate);
+    alarmDate.setMinutes(alarmDate.getMinutes() - 15);
+
+    // Format dates for .ics (YYYYMMDDTHHMMSS)
+    const formatDate = (date) => {
+        return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    };
+
+    const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//SleepCycle-Alarm//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:${Date.now()}@sleepcycle-alarm.app
+DTSTAMP:${formatDate(now)}
+DTSTART:${formatDate(bedtimeDate)}
+DTEND:${formatDate(wakeTimeDate)}
+SUMMARY:💤 Bedtime - ${cycles} sleep cycles
+DESCRIPTION:Go to bed at ${bedtime} to wake up refreshed at ${wakeTime} after ${cycles} sleep cycles.
+BEGIN:VALARM
+TRIGGER:-PT15M
+DESCRIPTION:Time to start winding down for bed!
+ACTION:DISPLAY
+END:VALARM
+END:VEVENT
+END:VCALENDAR`;
+
+    return icsContent;
+}
+
+/**
+ * Download .ics calendar file
+ * @param {string} bedtime - Bedtime in HH:MM format
+ * @param {string} wakeTime - Wake time in HH:MM format
+ * @param {number} cycles - Number of sleep cycles
+ */
+function downloadCalendarEvent(bedtime, wakeTime, cycles) {
+    const icsContent = generateICSFile(bedtime, wakeTime, cycles);
+    const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `bedtime-${bedtime.replace(":", "")}.ics`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+}
+
+/**
+ * Toggle browser notifications for a specific bedtime
+ * @param {string} bedtime - Bedtime in HH:MM format
+ * @param {HTMLElement} button - The button element that was clicked
+ */
+function toggleNotifications(bedtime, button) {
+    if (notificationPermission !== "granted") {
+        if (Notification.permission === "denied") {
+            alert("Notifications are blocked. Please enable them in your browser settings.");
+        } else {
+            Notification.requestPermission().then((permission) => {
+                notificationPermission = permission;
+                if (permission === "granted") {
+                    button.textContent = "✓ Alert Enabled";
+                    button.classList.add("enabled");
+                    // Test notification
+                    new Notification("Notifications Enabled! 🔔", {
+                        body: `You'll be notified when it's ${bedtime}`,
+                    });
+                } else {
+                    alert("Please enable notifications to use this feature.");
+                }
+            });
+        }
+    } else {
+        button.textContent = "✓ Alert Enabled";
+        button.classList.add("enabled");
+        button.disabled = true;
+        // Test notification
+        new Notification("Notifications Enabled! 🔔", {
+            body: `You'll be notified when it's ${bedtime}`,
+        });
+    }
+}
+
+/**
  * Create a result card element
  * @param {Object} option - Bedtime option
  * @param {boolean} isFirst - Whether this is the first option
+ * @param {string} wakeTime - Wake time in HH:MM format
  * @returns {HTMLElement} Result card element
  */
-function createResultCard(option, isFirst) {
+function createResultCard(option, wakeTime, isFirst) {
     const card = document.createElement("div");
     card.className = `result-card ${option.recommended ? "recommended" : ""}`;
 
@@ -217,11 +420,15 @@ function createResultCard(option, isFirst) {
     const minutes = Math.round((option.total_sleep_hours - hours) * 60);
     const durationText = `${hours}h ${minutes}m`;
 
+    // Create countdown element
+    const countdownId = `countdown-${option.bedtime.replace(":", "")}`;
+
     card.innerHTML = `
         <div class="result-header">
             <div class="bedtime">🛏️ ${option.bedtime}</div>
             <div class="cycles-badge">${option.cycles} cycle${option.cycles > 1 ? "s" : ""}</div>
         </div>
+        <div class="countdown active" id="${countdownId}">⏱️ Calculating...</div>
         <div class="sleep-info">
             Total sleep: <span class="sleep-duration">${durationText}</span>
             (${option.total_sleep_minutes} minutes)
@@ -229,7 +436,30 @@ function createResultCard(option, isFirst) {
         <div class="sleep-note">
             ${option.note}
         </div>
+        <div class="action-buttons">
+            <button class="btn-action btn-calendar" onclick="downloadCalendarEvent('${option.bedtime}', '${wakeTime}', ${option.cycles})">
+                📅 Add to Calendar
+            </button>
+            <button class="btn-action btn-notify" onclick="toggleNotifications('${option.bedtime}', this)">
+                🔔 Enable Alert
+            </button>
+        </div>
     `;
+
+    // Start countdown
+    const countdownElement = card.querySelector(`#${countdownId}`);
+    updateCountdown(countdownElement, option.bedtime);
+
+    // Set up interval to update countdown every minute
+    const intervalId = setInterval(() => {
+        const shouldContinue = updateCountdown(countdownElement, option.bedtime);
+        if (!shouldContinue) {
+            clearInterval(intervalId);
+            delete countdownIntervals[option.bedtime];
+        }
+    }, 60000); // Update every minute
+
+    countdownIntervals[option.bedtime] = intervalId;
 
     return card;
 }
