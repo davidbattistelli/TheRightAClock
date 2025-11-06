@@ -4,7 +4,10 @@
  */
 
 // Configuration
-const API_BASE_URL = "http://localhost:8000/api/v1";
+// Auto-detect API URL based on environment
+const API_BASE_URL = window.location.hostname === "localhost"
+    ? "http://localhost:8000/api/v1"
+    : "https://therightaclock.onrender.com/api/v1";  // Update this with your actual backend URL
 
 // DOM Elements
 const form = document.getElementById("calculator-form");

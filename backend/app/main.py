@@ -22,15 +22,12 @@ app = FastAPI(
 
 # Configure CORS (Cross-Origin Resource Sharing)
 # This allows the frontend (served on a different port) to call this API
+# NOTE: allow_origins=["*"] is for development/sharing with friends.
+# For production, specify exact domains.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8080",
-        "http://localhost:3000",
-        "http://127.0.0.1:8080",
-        "http://127.0.0.1:3000",
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],  # Allow all origins (development only)
+    allow_credentials=False,  # Must be False when using "*"
     allow_methods=["*"],
     allow_headers=["*"],
 )
