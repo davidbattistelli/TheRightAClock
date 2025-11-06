@@ -146,20 +146,36 @@ function validateFormData(data) {
  * @returns {Promise<Object>} API response
  */
 async function calculateBedtimes(data) {
-    const response = await fetch(`${API_BASE_URL}/calculate`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-    });
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
 
-    if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || `API error: ${response.status}`);
+        const response = await fetch(`${API_BASE_URL}/calculate`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(data),
+            signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || `API error: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        if (error.name === 'AbortError') {
+            throw new Error("Request timeout. The server might be waking up (can take 30-60 seconds on free hosting). Please try again.");
+        }
+        if (error.message === 'Failed to fetch' || error.message.includes('NetworkError')) {
+            throw new Error("Cannot connect to server. It might be waking up from sleep (takes 30-60 seconds on free hosting). Please wait and try again.");
+        }
+        throw error;
     }
-
-    return await response.json();
 }
 
 /**
